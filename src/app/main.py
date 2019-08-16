@@ -8,6 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.staticfiles import StaticFiles
 
 from app import admin, db, endpoints, globals, handlers, settings
+from app.api.main import app as api_app
 
 # config
 starlette_admin.config.logout_url = "/auth/logout"
@@ -46,6 +47,7 @@ app.add_route("/", endpoints.Home, methods=["GET"], name="home")
 
 # sub apps
 app.mount(path="/admin", app=admin.adminsite, name=admin.adminsite.name)
+app.mount(path="/api", app=api_app, name="api")
 app.mount(path="/auth", app=starlette_auth.app, name="auth")
 
 # static app
