@@ -1,39 +1,51 @@
-import starlette_admin
-import starlette_auth
-import starlette_core
+import starlette_admin as admin
+import starlette_auth as auth
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
+from starlette_core.middleware import DatabaseMiddleware
 
-from app import admin, db, endpoints, globals, handlers, settings
+from app import db
+from app import endpoints
+from app import settings
+from app.admin import adminsite
+from app.globals import templates
+from app.handlers import not_found, server_error
+from app.middleware import SessionMiddleware
+from app.sessions import CookieBackend, DatabaseBackend
 
-starlette_admin.config.templates = globals.templates
-starlette_auth.config.templates = globals.templates
+
+admin.config.templates = templates
+auth.config.templates = templates
 
 static = StaticFiles(directory="static", packages=["starlette_admin"])
 
-middleware = [
-    Middleware(starlette_core.middleware.DatabaseMiddleware),
+# session_backend = CookieBackend(secret_key=settings.SECRET_KEY, max_age=15)
+session_backend = DatabaseBackend(secret_key=settings.SECRET_KEY, max_age=60)
+
+app_middleware = [
+    Middleware(DatabaseMiddleware),
     Middleware(CORSMiddleware, allow_origins=settings.ALLOWED_HOSTS),
-    Middleware(SessionMiddleware, secret_key=settings.SECRET_KEY),
-    Middleware(AuthenticationMiddleware, backend=starlette_auth.ModelAuthBackend()),
+    Middleware(SessionMiddleware, backend=session_backend, max_age=60),
+    Middleware(AuthenticationMiddleware, backend=auth.ModelAuthBackend()),
 ]
 
-routes = [
+app_routes = [
     Route("/", endpoints.Home, methods=["GET"], name="home"),
-    Mount("/admin", app=admin.adminsite, name=admin.adminsite.name),
-    Mount("/auth", app=starlette_auth.app, name="auth"),
+    Mount("/admin", app=adminsite, name=adminsite.name),
+    Mount("/auth", app=auth.app, name="auth"),
     Mount("/static", app=static, name="static"),
 ]
 
-app = Starlette(debug=settings.DEBUG, middleware=middleware, routes=routes)  # type: ignore
+app = Starlette(
+    debug=settings.DEBUG, middleware=app_middleware, routes=app_routes
+)  # type: ignore
 
-app.add_exception_handler(404, handlers.not_found)
-app.add_exception_handler(500, handlers.server_error)
+app.add_exception_handler(404, not_found)
+app.add_exception_handler(500, server_error)
 
 if settings.SENTRY_DSN:
     try:
